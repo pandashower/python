@@ -1,3 +1,20 @@
+# Caªkowanie metod¡ Monte Carlo polega na:
+# 1.
+# okre±leniu prostok¡ta w którym znajduje si¦ caªkowany przedziaª,
+# 2.
+# losowaniu wspóªrz¦dnych wewn¡trz prostok¡ta,
+# 3.
+# sprawdzeniu czy punkt z wylosowanych wspóªrz¦dnych speªnia równanie,
+# 4.
+# obliczenia stosunku ilo±ci punktów speªniaj¡cych równanie do wszystkich wylosowanych punk-
+# tów,
+# 5.
+# obliczenie warto±ci caªki na podstawie stosunku ilo±ci traonych punktów do pola pola prosto-
+# k¡ta.
+# Napisz wªasn¡ implementacj¦ caªkowania wedªug metody Monte Carlo. Przetestuj dziaªanie
+# programu obliczaj¡c pole koªa o promieniu R oraz całka od 0 do 2 z sin(x)
+# Jak zmienia si¦ dokªadno±¢ oszacowania wraz ze wzrostem ilo±ci wylosowanych punktów?
+# Przydatne b¦d¡ metody z takich moduªów jak random oraz math
 import random
 import math
 
@@ -28,10 +45,6 @@ for i in range(N):
     if R < x*x + y*y:
         c += 1
 print("Pole Twojego koła: ", (b*g*c)/N)
-
-
-
-
 
 
 
