@@ -1,3 +1,10 @@
+# 1.
+# wczyta list¦ plików w katalogu 'zadanie1',
+# 2.
+# utworzy nowe katalogi i przeniesie do nich pliki, których nazwa rozpoczyna si¦ na t¦ sam¡ liter¦
+# (np. plik 'eHszo' zostanie przeniesiony do katalogu 'E').
+# Podczas realizacji zadania 1 przydatne b¦d¡ takie metody jak: glob.glob(), os.mkdir, os.rename().
+# W zadaniu u»yj obsªugi wyj¡tków zamiast sprawdzania czy katalog istnieje
 import os
 import glob
 import shutil
