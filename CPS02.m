@@ -1,8 +1,3 @@
-%DLA DOciekliwych w 2 i 4 zad do zrobienia i w 5 co dokładnie out!
-
-
-
-
 %% Zad.1 (1p) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all; close all; clc;
 
@@ -29,13 +24,14 @@ B = dctmtx(N);
 diff = A - B;
 max_diff = max(abs(diff(:)));
 
+% sprawdzanie ortonormlanosci
 for i = 1 : N-1
     for j = i+1 : N
         dotVal = dot(A(i,:), A(j,:));  % iloczyn skalarny wiersza i i j
         if abs(dotVal) < 10^-14
-            fprintf('Wiersze %d i %d: ortogonalne (OK)\n', i, j);
+            fprintf('Wiersze %d i %d: ortonormalne (OK)\n', i, j);
         else
-            fprintf('Wiersze %d i %d: NIE ortogonalne (iloczyn skalarny=%.5g)\n', i, j, dotVal);
+            fprintf('Wiersze %d i %d: NIE ortonormalne (iloczyn skalarny=%.5g)\n', i, j, dotVal);
         end
     end
 end
@@ -48,7 +44,7 @@ fprintf('Maksymalna różnica implemetacji matlab od mojej: %e\n', max_diff)
 
 
 
-%% Zad.2 (1,25???p) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Zad.2 (1,25p) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all; close all; clc;
 
 N = 20; % wymiar macierzy
@@ -86,10 +82,10 @@ x = randn(N,1);
 y = A * x; 
 
 % Rekonstrukcja (IDCT)
-xs = S * y;  
+xr = S * y;  
 
 % Porównanie x i x_odtw
-reconstruction_error = norm(x - xs);
+reconstruction_error = norm(x - xr);
 disp('Błąd rekonstrukcji sygnału:');
 disp(reconstruction_error)
 % Jeśli transformacja jest idealna, błąd powinien być bardzo mały (w granicach
@@ -97,50 +93,98 @@ disp(reconstruction_error)
 
 
 %% (Dla dociekliwych) Sprawdzenie ortonormalności macierzy losowej i jej odwrotności
-% Teraz wygenerujmy kwadratową macierz A (np. 20x20) za pomocą randn().
-N2 = 20;
-A = randn(N2);
+clear all; close all; clc;
 
-% Sprawdźmy "ortonormalność" w sensie: czy kolumny (bądź wiersze) tworzą bazę
-% ortonormalną. Aby macierz była ortonormalna, A'*A = I (dla kolumn ortonormalnych).
-% Dla losowej macierzy randn() prawdopodobnie nie będzie ortonormalna, 
-% ale możemy to po prostu zobaczyć.
-orth_check = A' * A;
+N = 20;
+A = randn(N);
 
-disp('Macierz A''*A (jeśli A byłaby ortonormalna, to byłaby zbliżona do I):');
-disp(orth_check);
+for i = 1 : N-1
+    for j = i+1 : N
+        dotVal = dot(A(i,:), A(j,:));  % iloczyn skalarny wiersza i i j
+        if abs(dotVal) < 10^-14
+            fprintf('Wiersze %d i %d: ortonormalne (OK)\n', i, j);
+        else
+            fprintf('Wiersze %d i %d: NIE ortonormalne (iloczyn skalarny=%.5g)\n', i, j, dotVal);
+        end
+    end
+end
 
-% Możemy też sprawdzić odchylenie od I:
-error_orth = norm(orth_check - eye(N2));
-disp(['Błąd ||A''*A - I|| = ', num2str(error_orth)]);
+% sprawdzamy "ortonormalność" wierszy, tzn. czy norma każdego wiersza ~ 1
+rowNorms = zeros(N,1);
+for i = 1:N
+    rowNorms(i) = norm(A(i,:));
+end
+disp('Normy wierszy losowej macierzy A:');
+disp(rowNorms);
 
-%% 6. Wyznaczenie macierzy odwrotnej i sprawdzenie A * inv(A) = I
-S_inv = inv(A);        % Macierz odwrotna do A
-I_check2 = A * S_inv;  % Sprawdzenie
+S=inv(A); % moge tak ale cieżej z typowym w DCT A' bo aby ortonormlaność -> A^-1=A^T
+% wierse kolumny muszą być parami prostopadłe i znormowane do 1,
+% transpozycja bardziej optymalna obliczeniowo
 
-disp('Macierz A * inv(A) (powinna być zbliżona do I):');
-disp(I_check2);
+% Sprawdzenie, czy S * A = I (macierz jednostkowa)
+I_check = A * S;
+disp('Maksymalne odchylenie randA (poza przekątną) od macierzy jednostkowej dla S * A = I:');
+maxx = max(max(abs(I_check - eye(N)))); % 1 maks daje nawiększe odchylenia w danych kolumnach
+disp(maxx); %blad duzy gdyby macierz nieodwracalna, kol/wiersze prawie liniowo zależne itp.
 
-error_inv = norm(I_check2 - eye(N2));
-disp(['Błąd ||A * inv(A) - I|| = ', num2str(error_inv)]);
+% Analiza i synteza dowolnego sygnału losowego (podobnie jak wyżej)
+x = randn(N,1);
+y = A * x;   % analiza
+x_s = S * y; % synteza
 
-%% 7. "Zepsucie" macierzy A i obserwacja wpływu na odwrotność
-% Przykładowo, zmieńmy drastycznie jeden z elementów A.
-A(1,1) = A(1,1) + 1e3;  % Duża zmiana w pierwszym elemencie
+% Czy x_s == x? (błąd rekonstrukcji)
+reconstruction_error_rand = norm(x - x_s);
+disp('Błąd rekonstrukcji sygnału przy macierzy randn() - owszem można dla każdego nieosobliwego A,');
+disp('ale taka macierz nie ma dobrego rozkładu energi np. koncentracji niskich częstotiwości ani');
+disp('jasnej interpretacji (losowe kolumny/wiersze niewiele wnoszą w kategoriach jakie częstotliwości lub wzorce');
+disp('zawiera sygnał, wartość błedu:');
+disp(reconstruction_error_rand);
 
-% Ponownie wyznaczmy odwrotność
-S_inv_corrupted = inv(A);
+N = 20; % wymiar macierzy
+A_spoiled = zeros(N,N); % rezerwujemy miejsce na macierz DCT-II
 
-% Sprawdźmy, co się dzieje z iloczynem A * S_inv_corrupted
-I_check3 = A * S_inv_corrupted;
+% budowa macierzy DCT z błędem k+0.25
+for k = 0 : N-1
+    if k == 0
+        s_k = sqrt(1/N);
+    else
+        s_k = sqrt(2/N);
+    end
+    
+    for n = 0 : N-1
+        A_spoiled(k+1, n+1) = s_k * cos( (pi*(k+0.25)/N) * (n + 0.5) );
+    end
+end
 
-disp('Macierz A * inv(A) po "zepsuciu" (powinna mocno odbiegać od I, w zależności od modyfikacji):');
-disp(I_check3);
+I_check = A_spoiled * A_spoiled';
+disp('(~0 zeby ortogonalna) Maksymalne odchylenie A z k+0.25 (poza przekątną) od macierzy jednostkowej dla A^T*A = I:');
+maxx = max(max(abs(I_check - eye(N))));
+disp(maxx);
 
-error_inv_corrupted = norm(I_check3 - eye(N2));
-disp(['Błąd ||A * inv(A) - I|| po modyfikacji A = ', num2str(error_inv_corrupted)]);
 
-%% Komentarze końcowe
+% Analiza i rekonstrukcja sygnału SZUMOWEGO
+x_rand = randn(N,1);       % sygnał losowy
+y_rand = A_spoiled * x_rand;  % "analiza" w zepsutej DCT
+
+% Próba rekonstrukcji: w prawidłowej DCT odwracamy przez transpozycję,
+% ale tu już macierz nie jest ściśle ortonormalna.
+x_recon_rand = A_spoiled' * y_rand;  
+
+error_rand = norm(x_rand - x_recon_rand);
+disp(['Błąd rekonstrukcji sygnału losowego: ', num2str(error_rand)]);
+
+% Analiza i rekonstrukcja sygnału HARMONICZNEGO
+n = (0:N-1).'; 
+freq = 2; % przykładowa częstotliwość dyskretna
+x_sin = sin(2*pi*freq*n/N);  
+
+y_sin = A_spoiled * x_sin;  
+x_recon_sin = A_spoiled' * y_sin;
+
+error_sin = norm(x_sin - x_recon_sin);
+disp(['Błąd rekonstrukcji sygnału sinusoidalnego: ', num2str(error_sin)]);
+
+% Komentarze końcowe
 % - W części z DCT/IDCT pokazujemy, że jeśli macierz D jest ortonormalna,
 %   to jej transpozycja D' jest odwrotnością, co prowadzi do idealnej rekonstrukcji sygnału.
 % - W części "dla dociekliwych" generujemy losową macierz A, sprawdzamy, 
@@ -171,7 +215,7 @@ A3 = 150;
 x = A1*sin(2*pi*f1*t) + A2*sin(2*pi*f2*t) + A3*sin(2*pi*f3*t);
 x=x';
 
-% Budowa macierzy DCT (A) i IDCT (S)
+% budowa macierzy DCT (A) i IDCT (S)
 A = zeros(N,N); 
 for k = 0 : N-1
     if k == 0
@@ -201,7 +245,7 @@ for i =1:N
 hold on;
     plot(A(i,:),"b-x")
     plot(S(:, i),"r")
-    %pause;
+    pause;
 end
 
 y = A * x;
@@ -319,10 +363,8 @@ pause;
 
 
 
-% (+0.25 pkt) Dodanie zakłócenia sinusoidalnego o częstotliwości 250 Hz
-% UWAGA na orientację wektora (x musi być kolumną lub wierszem konsekwentnie).
-
-% Dodaj sygnał sinusoidalny do oryginalnego sygnału mowy.
+% (+0.25p) Dodanie zakłócenia sinusoidalnego o częstotliwości 250 Hz
+% do oryginalnego sygnału mowy.
 x_noisy = x + 0.5 * sin(2 * pi * 250 / fs * (0:length(x)-1)');
 
 % zakłócony sygnał i go odsłuc
@@ -345,8 +387,13 @@ pause;
 % Możemy wyzerować pewien wąski zakres indeksów "w okolicach" harmonicznego zaburzenia.
 % (Najprostsze „ręczne” wyzerowanie jakiegoś zakresu, np. 100:200 – w praktyce
 % należałoby ustalić dokładny indeks częstotliwości 250 Hz w DCT.)
+N = length(x_noisy);
+f = 250;
+k = round((2 * N * f) / fs); % wyprowadzajac wzór na obliczanie częstotliwości 
+% bazowych dostajemy wzór na indeks w DCT
+% biore kilka dziesiąt okalających również bo energia sie "rozlewa"
 
-c_noisy(100:200) = 0;
+c_noisy(2348:2468) = 0; % po k liczym na dole to think about though
 
 % Odwrócona transformacja DCT po "usunięciu" zakłócenia
 y_clean = idct(c_noisy);
@@ -357,29 +404,6 @@ title('Sygnał po usunięciu zakłócenia');
 xlabel('Próbka'); ylabel('Amplituda');
 soundsc(y_clean, fs);
 pause;
-
-
-
-
-
-
-%{
-% 4. Dodanie zakłócenia sinusoidalnego 250 Hz
-x_noise = x + 0.5*sin(2*pi*250/fs*(0:length(x)-1)');
-figure; plot(x_noise); title('Sygnał z zakłóceniem');
-% soundsc(x_noise, fs);
-
-
-c_noise = dct(x_noise);
-stem(c_noise)
-c_noise(200:250) = 0;
-x_clean = idct(c_noise);
-
-% 6. Odsłuch i wyświetlenie wyników
-figure; plot(x_clean); title('Oczyszczony sygnał');
-% soundsc(x_clean, fs);
-%}
-
 
 
 
@@ -399,3 +423,5 @@ figure; plot(x_clean); title('Oczyszczony sygnał');
 % sygnałów audio) większość energii jest przenoszona w niższych częstotliwościach. 
 % Dlatego odcięcie początku (pierwszych współczynników) mocno zniekształca
 % sygnał – bo tracimy bazową strukturę dźwięku.
+
+
