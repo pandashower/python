@@ -1,0 +1,109 @@
+clear all; close all; clc;
+
+% Krok 1: Definicja parametrów
+omega_3dB = 2 * pi * 100;  % Częstotliwość odcięcia 3 dB w rad/s
+N_values = [2, 4, 6, 8];   % Rzędy filtru
+
+% Krok 2: Obliczenie współczynników filtru
+B = cell(1, length(N_values));  % Współczynniki licznika
+A = cell(1, length(N_values));  % Współczynniki mianownika
+
+for i = 1:length(N_values)
+    N = N_values(i);
+    [B{i}, A{i}] = butter(N, omega_3dB, 's');  % Filtr analogowy w dziedzinie s - analogowej
+end
+
+% Krok 4: Charakterystyki amplitudowe i fazowe
+omega = logspace(1, 4, 1000);  % Zakres częstotliwości od 10^1 do 10^4 rad/s
+f = omega / (2*pi);                 % konwersja na Hz
+figure('Name', 'Charakterystyki częstotliwościowe');
+
+for i = 1:length(N_values)
+    % Obliczenie odpowiedzi częstotliwościowej
+    H = freqs(B{i}, A{i}, omega);
+    H_dB = 20 * log10(abs(H));     % Amplituda w dB
+    phase_deg = angle(H) * (180 / pi);  % Faza w stopniach
+    
+    % Wykres amplitudy liniowej
+    subplot(2, 1, 1);
+    semilogx(f, abs(H), 'LineWidth', 1.5, 'DisplayName', ['N = ', num2str(N_values(i))]);
+    hold on;
+
+    % Wykres amplitudy liniowej llogarytmicznej
+    subplot(2, 1, 2);
+    semilogx(f, H_dB, 'LineWidth', 1.5, 'DisplayName', ['N = ', num2str(N_values(i))]);
+    hold on;
+end
+
+% Ustawienia wykresu amplitudy
+subplot(2, 1, 1);
+title('Charakterystyka amplitudowa');
+xlabel('Częstotliwość (Hz)');
+ylabel('abs(H)');
+xLimits = xlim;         % Pobiera aktualne limity osi X
+xLimits(1) = 10;      % Ustawia dolną granicę na 100
+xlim(xLimits);          % Ustawia nowe limity
+legend('show');
+grid on;
+
+% Ustawienia wykresu amplitudy log
+subplot(2, 1, 2);
+title('Charakterystyka amplitudowa');
+xlabel('Częstotliwość (Hz)');
+ylabel('20 * log10(abs(H)');
+xLimits = xlim;         % Pobiera aktualne limity osi X
+xLimits(1) = 10;      % Ustawia dolną granicę na 100
+xlim(xLimits);          % Ustawia nowe limity
+legend('show');
+grid on;
+
+% wykres fazy
+figure;
+for i = 1:length(N_values)
+    % Obliczenie odpowiedzi częstotliwościowej
+    H = freqs(B{i}, A{i}, omega);
+    phase_deg = angle(H) * (180 / pi);  % Faza w stopniach
+
+    % Wykres fazy
+    plot(f, phase_deg, 'LineWidth', 1.5, 'DisplayName', ['N = ', num2str(N_values(i))]);
+    title('Charakterystyka fazowa');
+    xlabel('Częstotliwość (Hz)');
+    ylabel('Faza (stopnie)');
+    legend('show');
+    grid on;
+    hold on;
+end
+
+% Krok 5: Odpowiedzi impulsowe i skokowe
+t = 0:0.0001:0.05;  % Wektor czasu (dostosowany do szybkiego zaniku odpowiedzi)
+figure('Name', 'Odpowiedzi czasowe');
+
+for i = 1:length(N_values)
+    % Stworzenie obiektu funkcji transmitancji
+    sys = tf(B{i}, A{i});
+    
+    % Obliczenie odpowiedzi impulsowej
+    h = impulse(sys, t);
+    
+    % Obliczenie odpowiedzi skokowej
+    H = step(sys, t);
+    
+    % Wykres odpowiedzi impulsowej
+    subplot(2, 4, i);
+    plot(t, h, 'LineWidth', 1.5);
+    title(['h(t) dla N = ', num2str(N_values(i))]);
+    xlabel('Czas (s)');
+    ylabel('h(t)');
+    grid on;
+    
+    % Wykres odpowiedzi skokowej
+    subplot(2, 4, i + 4);
+    plot(t, H, 'LineWidth', 1.5);
+    title(['H(t) dla N = ', num2str(N_values(i))]);
+    xlabel('Czas (s)');
+    ylabel('H(t)');
+    grid on;
+end
+
+% Dostosowanie układu wykresów
+set(gcf, 'Position', [100, 100, 1200, 600]);  % Powiększenie okna dla lepszej widoczności
