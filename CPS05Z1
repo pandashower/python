@@ -1,0 +1,118 @@
+% ZADANIE 1: PROJEKTOWANIE METODĄ ZER I BIEGUNÓW
+clear; clc; close all;
+
+% 1. Definicja zer i biegunów
+% Zera (z1,2 = ±j5, z3,4 = ±j15)
+z = [1j*5, -1j*5, 1j*15, -1j*15];
+
+% Bieguny (p1,2 = -0.5 ± j9.5, p3,4 = -1 ± j10, p5,6 = -0.5 ± j10.5)
+p = [ -0.5+1j*9.5, -0.5-1j*9.5, -1+1j*10, -1-1j*10, -0.5+1j*10.5, -0.5-1j*10.5];
+
+% Na początku przyjmujemy wzmocnienie K = 1
+% (ewentualnie zmodyfikujemy je później) żeby wzmocnienie układu wynosiło 1
+K = 1;
+
+% 2. Rysowanie zer i biegunów na płaszczyźnie zespolonej
+figure('Name','Zera i bieguny','NumberTitle','off');
+plot(real(z),imag(z),'o','MarkerSize',8,'LineWidth',2); hold on;
+plot(real(p),imag(p),'*','MarkerSize',8,'LineWidth',2);
+grid on; axis equal;
+xlabel('Re\{s\}'); ylabel('Im\{s\}');
+title('Zera (o) i bieguny (*) na płaszczyźnie s');
+
+% 3. Wyznaczenie wielomianów b(s) i a(s) przy pomocy poly()
+% poly() przyjmuje wektor miejsc zerowych/biegunowych i zwraca
+% współczynniki wielomianu, którego korzenie są w tych miejscach.
+b = poly(z);  % wielomian w liczniku
+a = poly(p);  % wielomian w mianowniku
+
+% polyval(b, 5i) % sprawdzenie -> tak, poly dało wielomian b, którego
+% m.zerowe to z
+
+% Jeśli chcemy, aby finalnie H(s) = K * b(s)/a(s), możemy uwzględnić K tu:
+bK = K * b;   % z uwzględnionym wzmocnieniem
+
+% 4. Obliczenie charakterystyk amplitudowej i fazowej w funkcji cz. kątowej omega
+% Zakres częstotliwości (rad/s) - można dostosować
+omega = linspace(0, 50, 1000);
+
+% Rezerwujemy miejsce na wynik: H(j*omega)
+Hjw = zeros(size(omega));
+
+for k=1:length(omega)
+    s = 1i*omega(k);
+    Hjw(k) = polyval(bK, s) / polyval(a, s);
+end
+
+% Amplituda w skali liniowej i w dB
+H_amp = abs(Hjw);
+H_amp_dB = 20*log10(H_amp);
+
+% Faza (w radianach lub stopniach)
+H_phase = angle(Hjw);         % w radianach
+H_phase_deg = H_phase*180/pi; % w stopniach
+
+% 5. Rysowanie charakterystyk amplitudy i fazy
+figure('Name','Charakterystyki amplitudowa i fazowa','NumberTitle','off');
+
+subplot(2,1,1);
+plot(omega, H_amp_dB, 'LineWidth',1.5);
+grid on;
+xlabel('\omega [rad/s]'); ylabel('20 log_{10} |H(j\omega)| [dB]');
+title('Charakterystyka amplitudowa w dB');
+
+subplot(2,1,2);
+plot(omega, H_phase_deg, 'LineWidth',1.5);
+grid on;
+xlabel('\omega [rad/s]'); ylabel('Faza [stopnie]');
+title('Charakterystyka fazowa');
+
+%% 6. Sprawdzenie, czy filtr jest pasmowo-przepustowy oraz modyfikacja wzmocnienia
+% Dla filtru pasmowo-przepustowego w okolicy \omega0 ~ 10 rad/s
+% chcemy zwykle mieć wzmocnienie ~1. Sprawdźmy aktualne wzmocnienie:
+omega0 = 10;  % wybrana częstotliwość w pasmie
+Hjw_omega0 = polyval(bK, 1i*omega0) / polyval(a, 1i*omega0),
+gain_at_omega0 = abs(Hjw_omega0);
+
+fprintf('Aktualne wzmocnienie w pasmie przy %.1f rad/s = %.4f\n', omega0, gain_at_omega0);
+
+% Jeśli chcemy skorygować, żeby wzmocnienie było równe 1, wyliczamy nowe K:
+K_new = 1 / gain_at_omega0;
+fprintf('Nowe K (aby wzmocnienie w %g rad/s wynosiło 1) = %.4f\n', omega0, K_new);
+
+% Możemy od razu zastosować to nowe K i przerysować charakterystyki:
+bK_new = bK * K_new;  % korygujemy licznik
+
+% Obliczamy ponownie charakterystyki z nowym K.
+Hjw_new = zeros(size(omega));
+for k=1:length(omega)
+    s = 1i*omega(k);
+    Hjw_new(k) = polyval(bK_new, s) / polyval(a, s);
+end
+H_amp_new = abs(Hjw_new);
+H_amp_dB_new = 20*log10(H_amp_new);
+
+% Rysujemy nową charakterystykę amplitudową po korekcie
+figure('Name','Charakterystyka amplitudowa po korekcie K','NumberTitle','off');
+plot(omega, H_amp_dB_new, 'LineWidth',1.5); grid on;
+xlabel('\omega [rad/s]'); ylabel('20 log_{10} |H(j\omega)| [dB]');
+title('Charakterystyka amplitudowa z nowym wzmocnieniem K');
+
+% 7. Analiza tłumienia w pasmie zaporowym
+% Przykładowo, można poszukać maksimum i minimum w dB
+% w pewnych fragmentach widma (np. do i powyżej pasma przepustowego)
+% Tu jedynie przykład jak to obliczyć:
+idx_pass = find(omega > 8 & omega < 12);  % pasmo przepustowe wokół 10 rad/s
+idx_stop_low = find(omega < 4);          % "dolne" pasmo zaporowe
+idx_stop_high = find(omega > 15);        % "górne" pasmo zaporowe
+
+max_in_passband_dB  = max(H_amp_dB_new(idx_pass));
+min_in_passband_dB  = min(H_amp_dB_new(idx_pass));
+max_in_stopband_low = max(H_amp_dB_new(idx_stop_low));
+max_in_stopband_high= max(H_amp_dB_new(idx_stop_high));
+
+fprintf('\n=== PODSUMOWANIE ===\n');
+fprintf('Maksymalne wzmocnienie w pasmie przepustowym (dB): %.2f\n', max_in_passband_dB);
+fprintf('Minimalne wzmocnienie w pasmie przepustowym (dB): %.2f\n', min_in_passband_dB);
+fprintf('Maksymalne wzmocnienie w dolnym pasmie zaporowym (dB): %.2f\n', max_in_stopband_low);
+fprintf('Maksymalne wzmocnienie w gornym pasmie zaporowym (dB): %.2f\n', max_in_stopband_high);
