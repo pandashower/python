@@ -1,181 +1,126 @@
+%% Zadanie 4 – filtracja dźwięków rzeczywistych (wersja: motor + bird, poprawka zakresu filtru) 
+% (c) Twoje Imię 2024 – wolno korzystać i modyfikować
+% -------------------------------------------------------------------------
+%  W tej wersji nie korzystamy z pliku „speech.wav”.  Miks składa się z:
+%  • motor.wav – niskoczęstotliwościowy warkot silnika
+%  • bird.wav  – wysokoczęstotliwościowy śpiew ptaka
+%  Celem jest odseparowanie śpiewu ptaka od tła silnika.
+% -------------------------------------------------------------------------
+
 clear; close all; clc;
-% Parametry
-fs = 3.2e6;          % częstotliwość próbkowania
-N  = 32e6;           % liczba próbek
-fc = 407812.5;      % częstotliwość przesunięcia
-bwSERV = 80e3;       % pasmo stacji FM
-bwAUDIO = 16e3;      % pasmo audio mono
 
-% Wczytanie surowych próbek (8-bit unsigned IQ: [I0 Q0 I1 Q1 ...])
-fid = fopen('samples_100MHz_fs3200kHz.raw','rb');
-s = fread(fid, 2*N, 'uint8');
-fclose(fid);
-s = int16(s) - 127;
+%% 1. Wczytanie sygnałów ---------------------------------------------------
+[motor, fsMotor] = audioread("10_14B.wav");   % burza
+[bird , fsBird ] = audioread("grilli.wav");    % świerszcze
 
-% Rozdział na I i Q oraz złożenie sygnału zespolonego
-I = double(s(1:2:end));
-Q = double(s(2:2:end));
-wideband = I + 1j*Q;
-t = (0:N-1)'/fs;
+%% 2. Wyrównanie częstotliwości próbkowania --------------------------------
+fs   = max([fsMotor, fsBird]);                % użyj najwyższej dostępnej
+motor = resample(motor, fs, fsMotor);
+bird  = resample(bird , fs, fsBird );
 
-% Shift do zera stacji
-wideband_shifted = wideband .* exp(-1j*2*pi*fc*t);
+%% 3. Ucięcie do wspólnej długości i stworzenie sumy -----------------------
+L     = min([numel(motor), numel(bird)]);
+motor = motor(1:L);
+bird  = bird (1:L);
 
-% Projektowanie i aplikacja filtru dolnoprzepustowego (80 kHz)
-[b_lp,a_lp] = butter(4, bwSERV/(fs/2), 'low');
-wb_filt = filter(b_lp, a_lp, wideband_shifted);
+mix   = motor + bird;
+mix   = mix ./ max(abs(mix));                 % normalizacja – zapobiega przesterowi
 
-% Decymacja do pasma ±bwSERV
-dec_factor = floor(fs/(2*bwSERV));
-x = wb_filt(1:dec_factor:end);
+%% 4. Widma FFT pojedynczych sygnałów i sumy --------------------------------
+figure('Name','Widma FFT','Position',[100 100 1400 600])
+subplot(2,2,1);  plotFFT(motor, fs, 'Motor');
+subplot(2,2,2);  plotFFT(bird , fs, 'Bird');
+subplot(2,2,3);  plotFFT(mix  , fs, 'Motor + Bird');
 
-% FM-demodulacja przez różnicę fazy
-dx = x(2:end) .* conj(x(1:end-1));
-y = angle(dx);
+%% 5. Spektrogramy (STFT) ---------------------------------------------------
+figure('Name','Spektrogramy');
+subplot(2,2,1);  plotSpec(motor, fs, 'Motor');
+subplot(2,2,2);  plotSpec(bird , fs, 'Bird');
+subplot(2,2,3);  plotSpec(mix  , fs, 'Sum (mix)');
 
-% Filtr dolnoprzepustowy audio (16 kHz przy fs=160kHz)
-fs1 = 160e3;
-[b2,a2] = butter(4, bwAUDIO/(fs1/2), 'low');
-y_filt = filter(b2, a2, y);
+%% 6. Projekt rekursywnego filtru IIR – zostawiamy tylko śpiew ptaka --------
+%  Zakładamy, że śpiew ptaka występuje głównie > 3 kHz, a warkot silnika
+%  poniżej 1 kHz.  Poniższy kod sam dopasowuje górną granicę pasma do
+%  aktualnego fs, żeby uniknąć błędu „frequencies must be over the (0,1)
+%  interval” przy zbyt niskiej częstotliwości próbkowania.
+order          = 6;
+lowCutDesired  = 150;        % Hz
+highCutDesired = 2000;       % Hz (domyślnie)
+nyq            = fs/2;        % częst. Nyquista
 
-% Decymacja do 32 kHz
-dec2 = floor(fs1/(2*bwAUDIO));
-ym = y_filt(1:dec2:end);
+% Skoryguj górną granicę, jeśli wykracza poza Nyquista
+highCut = min(highCutDesired, 0.9*nyq);   % 0.9*nyq zostawia zapas
+lowCut  = lowCutDesired;
 
-% Filtr de-emfazy (τ = 75 µs) przy fs_audio = 32 kHz
-fs_audio = 32e3;
-tau = 75e-6;
-dt = 1/fs_audio;
-alpha = dt/(tau+dt);
-b_de = alpha;
-a_de = [1, alpha-1];
-ym = filter(b_de, a_de, ym);
+% Jeśli pasmo „zwraca się” – przejdź na filtr górnoprzepustowy
+if lowCut >= highCut
+    warning("fs=%.0f Hz jest zbyt małe na pasmo 3–12 kHz – używam filtru HPF > %.0f Hz", fs, lowCut);
+    [b,a] = butter(order, lowCut/nyq, 'high');
+    filtType = sprintf('High‑pass > %d Hz', lowCut);
+else
+    [b,a] = butter(order, [lowCut highCut]/nyq, 'bandpass');
+    filtType = sprintf('Band‑pass %d–%d Hz', lowCut, round(highCut));
+end
 
-% Normalizacja sygnału audio
-ym = ym - mean(ym);
-ym = ym / (1.001 * max(abs(ym)));
-soundsc( ym, fs_audio);
+% Charakterystyka amplitudowa w dB ----------------------------------------
+figure('Name','Charakterystyka filtru');
+[H,w] = freqz(b, a, 4096, fs);
+plot(w, 20*log10(abs(H))), grid on
+xlabel('Częstotliwość [Hz]'); ylabel('|H(f)| [dB]')
+ylim([-80 5]); title(['Butterworth ' filtType])
 
+% Zera i bieguny -----------------------------------------------------------
+figure('Name','Z-P filtru');  zplane(b, a);  title(['Z‑plane ' filtType])
 
-% --- PSD (Pwelch) ---
-figure; 
-[pxx,f] = pwelch(wideband, 2048, [], [], fs);
-semilogy(f,pxx); grid on;
-title('|X(f)| wideband'); xlabel('Hz'); ylabel('PSD');
+%% 7. Filtracja sygnału sumy i odsłuch --------------------------------------
+filtered = filter(b, a, mix);
+filtered = filtered ./ max(abs(filtered));     % normalizacja
+soundsc(filtered, fs)                         % odsłuch
 
-figure; 
-[pxx,f] = pwelch(wideband_shifted, 2048, [], [], fs);
-semilogy(f,pxx); grid on;
-title('|X(f)| shifted'); xlabel('Hz'); ylabel('PSD');
+% Zapis do pliku
+outfile = "bird_isolated.wav";
+audiowrite(outfile, filtered, fs);
 
-figure; 
-[pxx,f] = pwelch(wb_filt, 2048, [], [], fs);
-semilogy(f,pxx); grid on;
-title('|X(f)| filtered'); xlabel('Hz'); ylabel('PSD');
+%% 8. Widma FFT + STFT po filtrze ------------------------------------------
+figure('Name','Widmo sygnału po filtrze');
+plotFFT(filtered, fs, sprintf('Filtered (%s)', filtType));
 
-figure; 
-[pxx,f] = pwelch(x, 2048, [], [], fs);
-semilogy(f,pxx); grid on;
-title('|X(f)| decimated'); xlabel('Hz'); ylabel('PSD');
+figure('Name','Spektrogram po filtrze');
+plotSpec(filtered, fs, sprintf('Filtered (%s)', filtType));
 
-figure; 
-[pxx,f] = pwelch(y, 2048, [], [], fs1);
-semilogy(f,pxx); grid on;
-title('|X(f)| demodulated'); xlabel('Hz'); ylabel('PSD');
+%% 9. Porównawcze zestawienie (bird vs. po filtrze) -------------------------
+figure('Name','Porównanie widm – oryginalny bird vs. wynik filtru');
+[Bw, faxis] = getFFT(bird    , fs);
+[Fw, ~   ]  = getFFT(filtered, fs);
+plot(faxis, Bw, 'DisplayName','Oryginalny bird'); hold on
+plot(faxis, Fw, 'DisplayName','Po filtrze');
+legend show; grid on; xlim([0 nyq])
+xlabel('Częstotliwość [Hz]'); ylabel('|X(f)|');
+title('Porównanie FFT');
 
-figure; 
-[pxx,f] = pwelch(ym, 2048, [], [], fs_audio);
-semilogy(f,pxx); grid on;
-title('|X(f)| ym decimated down sampled'); xlabel('Hz'); ylabel('PSD');
+disp("✓ Gotowe! Izolowany śpiew ptaka zapisano w pliku " + outfile);
 
+%% -------------------------------------------------------------------------
+%  Lokalne funkcje pomocnicze ----------------------------------------------
+function plotFFT(x, fs, ttl)
+    [X,f] = getFFT(x, fs);
+    plot(f, X); grid on
+    title(['FFT – ' ttl]); xlabel('Częstotliwość [Hz]'); ylabel('|X(f)|');
+    xlim([0 fs/2]);
+end
 
-% wykres przebiegu czasowego mono-audio
-fs_audio   = 32e3;            % już zdefiniowane w Twoim skrypcie
-N_audio    = length(ym);      % liczba próbek po wszystkich operacjach
-t_audio    = (0:N_audio-1)/fs_audio;   % wektor czasu w [s]
-figure;
-plot(t_audio, ym);
-xlabel('t  [s]');
-ylabel('amplitude');
-title('decoded / down-sampled mono audio');
-grid on;
-xlim([0 10]);
-ylim([-2 2]);    
+function [X,f] = getFFT(x, fs)
+    N  = numel(x);
+    win = hann(N);
+    Xc = fft(x .* win);
+    X  = abs(Xc(1:floor(N/2))) / N * 2;
+    f  = (0:numel(X)-1)' * fs/N;
+end
 
-
-
-% % --- Spektrogramy ---
-% figure;
-% spectrogram(wideband_shifted, 1024, 512, 1024, fs, 'yaxis');
-% title('Spectrogram shifted');
-% 
-% figure;
-% spectrogram(wb_filt, 1024, 512, 1024, fs, 'yaxis');
-% title('Spectrogram filtered');
-% 
-% figure;
-% spectrogram(y_filt, 1024, 512, 1024, fs1, 'yaxis');
-% title('Spectrogram y\_filt');
-% 
-% figure;
-% spectrogram(ym, 1024, 512, 1024, fs_audio, 'yaxis');
-% title('Spectrogram audio');
-
-
-%% --- Spektrogramy ---  (ustawienia okno = 1024, overlap = 3/4)
-wlen  = 1024;
-nov   = round(0.75*wlen);
-nfft  = wlen;
-
-% 1. oryginalny strumień I/Q (IF ≈ 100 kHz)
-figure;
-spectrogram(wideband, wlen, nov, nfft, fs, 'yaxis');
-title('Spectrogram ①  wideband  (Fs = 3.2 MHz)');
-
-% 2. po przesunięciu do 0 Hz
-figure;
-spectrogram(wideband_shifted, wlen, nov, nfft, fs, 'yaxis');
-title('Spectrogram ②  shifted to baseband');
-
-% 3. po filtrze LP 80 kHz
-figure;
-spectrogram(wb_filt, wlen, nov, nfft, fs, 'yaxis');
-title('Spectrogram ③  LP 80 kHz');
-
-% 4. po decymacji ×20  →  Fs = 160 kHz
-figure;
-spectrogram(x, wlen, nov, nfft, fs1, 'yaxis');
-title('Spectrogram ④  x  (Fs = 160 kHz)');
-
-% 5. „sygnał hybrydowy” tuż po demodulacji FM
-figure;
-spectrogram(y, wlen, nov, nfft, fs1, 'yaxis');
-title('Spectrogram ⑤  y  – demodulated hybrid (mono + 19 kHz pilot + stereo + RDS)');
-
-% 6. zdekodowany mono-audio po LP 16 kHz, decymacji ×5 i de-emfazie
-figure;
-spectrogram(ym, wlen, nov, nfft, fs_audio, 'yaxis');
-title('Spectrogram ⑥  ym  (mono audio, Fs = 32 kHz)');
-
-
-
-
-% --- Charakterystyki częstotliwościowe filtrów de- and pre-emfazy ---
-f_cutoff = 2100;  % Hz
-order = 1;
-
-% de-emphasis (mały LP przy 2.1 kHz)
-[b_de2,a_de2] = butter(order, f_cutoff/(fs_audio/2), 'low');
-% pre-emphasis (HP przy 2.1 kHz)
-[b_pre,a_pre] = butter(order, f_cutoff/(fs_audio/2), 'high');
-
-[H_de,w] = freqz(b_de2, a_de2, 8000, fs_audio);
-[H_pr,~] = freqz(b_pre, a_pre, 8000, fs_audio);
-
-figure; 
-semilogx(w,20*log10(abs(H_de)+eps)); hold on;
-semilogx(w,20*log10(abs(H_pr)+eps));
-xline(f_cutoff,'--g','2.1 kHz');
-grid on; legend('de-emphasis','pre-emphasis');
-title('Charakterystyki amplitudowo-częstotliwościowe');
-xlabel('Hz'); ylabel('dB');
+function plotSpec(x, fs, ttl)
+    window   = 1024;
+    noverlap = 512;
+    nfft     = 1024;
+    spectrogram(x, window, noverlap, nfft, fs, 'yaxis');
+    title(['Spektrogram – ' ttl]);
+end
